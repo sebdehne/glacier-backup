@@ -33,7 +33,7 @@ public class BackupService {
             s.remove(s.size() - 1);
             save(s);
             s = getBackupState();
-            System.out.println("Deleted backup from " + Instant.ofEpochMilli(toBeDeleted.getCreatedAt()).atZone(ZoneId.systemDefault()).toLocalDateTime());
+            System.out.println("Deleted old backup from " + Instant.ofEpochMilli(toBeDeleted.getCreatedAt()).atZone(ZoneId.systemDefault()).toLocalDateTime());
         }
 
         String archiveId = uploadNew(archiveFile);
