@@ -19,7 +19,7 @@ public class Main {
 
         long took = new BackupService(
                 3,
-                new GlacierClient(GLACIER_REGION, 5, GLACIER_VAULT),
+                new GlacierClient2(GLACIER_REGION, GLACIER_VAULT),
                 new SimpleDbClient(SDB_DOMAIN, SDB_REGION))
                 .uploadBackup(
                         args[0].trim(),

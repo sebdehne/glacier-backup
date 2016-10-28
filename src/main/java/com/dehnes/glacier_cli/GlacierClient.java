@@ -17,9 +17,9 @@ import java.util.stream.Collectors;
 
 public class GlacierClient {
 
-    private final AmazonGlacierClient client;
-    private final int parallelUploads;
-    private final String vaultName;
+    final AmazonGlacierClient client;
+    final int parallelUploads;
+    final String vaultName;
 
     public GlacierClient(Regions region, int parallelUploads, String vaultName) {
         this.parallelUploads = parallelUploads;
@@ -36,7 +36,20 @@ public class GlacierClient {
         }
     }
 
-    public String initiateMultipartUpload(int partSize) {
+    public String uploadNew(int partSize, String archiveFile, boolean tryRun) throws Exception {
+        String uploadId = initiateMultipartUpload(partSize);
+        String checksum = uploadParts(uploadId, partSize, archiveFile, tryRun);
+        return completeMultiPartUpload(uploadId, checksum, archiveFile, tryRun);
+    }
+
+    public void deleteArchive(String archiveId) {
+        DeleteArchiveRequest request = new DeleteArchiveRequest()
+                .withVaultName(vaultName)
+                .withArchiveId(archiveId);
+        client.deleteArchive(request);
+    }
+
+    private String initiateMultipartUpload(int partSize) {
 
         // Initiate
         InitiateMultipartUploadRequest request = new InitiateMultipartUploadRequest()
@@ -47,13 +60,6 @@ public class GlacierClient {
         InitiateMultipartUploadResult result = client.initiateMultipartUpload(request);
 
         return result.getUploadId();
-    }
-
-    public void deleteArchive(String archiveId) {
-        DeleteArchiveRequest request = new DeleteArchiveRequest()
-                .withVaultName(vaultName)
-                .withArchiveId(archiveId);
-        client.deleteArchive(request);
     }
 
     private class CheckSumHolder implements Comparable<CheckSumHolder> {
@@ -79,7 +85,7 @@ public class GlacierClient {
         }
     }
 
-    public String uploadParts(
+    private String uploadParts(
             String uploadId,
             int partSize,
             String archiveFilePath,
@@ -178,7 +184,7 @@ public class GlacierClient {
         return TreeHashGenerator.calculateTreeHash(l.stream().map(ch -> ch.checksum).collect(Collectors.toList()));
     }
 
-    public String completeMultiPartUpload(
+    private String completeMultiPartUpload(
             String uploadId,
             String checksum,
             String archiveFilePath,

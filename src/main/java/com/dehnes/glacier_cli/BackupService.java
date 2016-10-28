@@ -14,11 +14,11 @@ public class BackupService {
     //private static int partSize = (int) Math.pow(2, 30); // 1073741824 / 1073MB
     private static int partSize = (int) Math.pow(2, 27); //    134217728 /  134MB
     private final int maxRetention;
-    private final GlacierClient glacierClient;
+    private final GlacierClient2 glacierClient;
     private final SimpleDbClient simpleDbClient;
     private final Gson gson = new Gson();
 
-    public BackupService(int maxRetention, GlacierClient glacierClient, SimpleDbClient simpleDbClient) {
+    public BackupService(int maxRetention, GlacierClient2 glacierClient, SimpleDbClient simpleDbClient) {
         this.maxRetention = maxRetention;
         this.glacierClient = glacierClient;
         this.simpleDbClient = simpleDbClient;
@@ -39,7 +39,7 @@ public class BackupService {
             }
         }
 
-        String archiveId = uploadNew(archiveFile, tryRun);
+        String archiveId = glacierClient.uploadNew(partSize, archiveFile, tryRun);
         Backup e = new Backup();
         e.setArchiveId(archiveId);
         e.setCreatedAt(System.currentTimeMillis());
@@ -57,12 +57,6 @@ public class BackupService {
 
     private void save(List<Backup> state) {
         simpleDbClient.set("backupstate", state.stream().map(b -> new Attribute("json", gson.toJson(b))).collect(Collectors.toList()));
-    }
-
-    private String uploadNew(String archiveFile, boolean tryRun) throws Exception {
-        String uploadId = glacierClient.initiateMultipartUpload(partSize);
-        String checksum = glacierClient.uploadParts(uploadId, partSize, archiveFile, tryRun);
-        return glacierClient.completeMultiPartUpload(uploadId, checksum, archiveFile, tryRun);
     }
 
 }
