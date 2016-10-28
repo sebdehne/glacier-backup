@@ -183,5 +183,21 @@ public class GlacierClient {
         return compResult.getArchiveId();
     }
 
+    public void getInventory() {
+        JobParameters jobParameters = new JobParameters()
+                .withType("inventory-retrieval");
+        InitiateJobRequest request = new InitiateJobRequest()
+                .withJobParameters(jobParameters)
+                .withVaultName(vaultName);
+        InitiateJobResult job = client.initiateJob(request);
+        System.out.println(job);
+        System.out.println(job.getJobId());
+    }
+
+    public static void main(String[] args) {
+        GlacierClient c = new GlacierClient(Regions.EU_CENTRAL_1, 1, "testvault");
+        c.getInventory();
+    }
+
 
 }
