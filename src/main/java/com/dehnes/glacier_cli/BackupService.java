@@ -11,7 +11,7 @@ import java.util.stream.Collectors;
 
 public class BackupService {
 
-    private static int partSize = (int) Math.pow(2, 25); // 33554432 / 33MB
+    private static int partSize = (int) Math.pow(2, 30); // 1073741824 / 1GB
     private final int maxRetention;
     private final GlacierClient glacierClient;
     private final SimpleDbClient simpleDbClient;
@@ -23,25 +23,29 @@ public class BackupService {
         this.simpleDbClient = simpleDbClient;
     }
 
-    public long uploadBackup(String archiveFile) throws Exception {
+    public long uploadBackup(String archiveFile, boolean tryRun) throws Exception {
         long startedAt = System.currentTimeMillis();
 
         List<Backup> s = getBackupState();
-        while (s.size() >= maxRetention) {
-            Backup toBeDeleted = s.get(s.size() - 1);
-            glacierClient.deleteArchive(toBeDeleted.getArchiveId());
-            s.remove(s.size() - 1);
-            save(s);
-            s = getBackupState();
-            System.out.println("Deleted old backup from " + Instant.ofEpochMilli(toBeDeleted.getCreatedAt()).atZone(ZoneId.systemDefault()).toLocalDateTime());
+        if (!tryRun) {
+            while (s.size() >= maxRetention) {
+                Backup toBeDeleted = s.get(s.size() - 1);
+                glacierClient.deleteArchive(toBeDeleted.getArchiveId());
+                s.remove(s.size() - 1);
+                save(s);
+                s = getBackupState();
+                System.out.println("Deleted old backup from " + Instant.ofEpochMilli(toBeDeleted.getCreatedAt()).atZone(ZoneId.systemDefault()).toLocalDateTime());
+            }
         }
 
-        String archiveId = uploadNew(archiveFile);
+        String archiveId = uploadNew(archiveFile, tryRun);
         Backup e = new Backup();
         e.setArchiveId(archiveId);
         e.setCreatedAt(System.currentTimeMillis());
         s.add(e);
-        save(s);
+        if (!tryRun) {
+            save(s);
+        }
 
         return System.currentTimeMillis() - startedAt;
     }
@@ -54,10 +58,10 @@ public class BackupService {
         simpleDbClient.set("backupstate", state.stream().map(b -> new Attribute("json", gson.toJson(b))).collect(Collectors.toList()));
     }
 
-    private String uploadNew(String archiveFile) throws Exception {
+    private String uploadNew(String archiveFile, boolean tryRun) throws Exception {
         String uploadId = glacierClient.initiateMultipartUpload(partSize);
-        String checksum = glacierClient.uploadParts(uploadId, partSize, archiveFile);
-        return glacierClient.completeMultiPartUpload(uploadId, checksum, archiveFile);
+        String checksum = glacierClient.uploadParts(uploadId, partSize, archiveFile, tryRun);
+        return glacierClient.completeMultiPartUpload(uploadId, checksum, archiveFile, tryRun);
     }
 
 }

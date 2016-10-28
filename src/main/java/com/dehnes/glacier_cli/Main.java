@@ -12,15 +12,19 @@ public class Main {
 
     public static void main(String[] args) throws Exception {
 
-        if (args.length != 1) {
-            System.err.println("Usage: [archiveFile]");
+        if (args.length != 2) {
+            System.err.println("Usage: [archiveFile] [tryRun]");
             System.exit(1);
         }
 
         long took = new BackupService(
                 3,
                 new GlacierClient(GLACIER_REGION, 5, GLACIER_VAULT),
-                new SimpleDbClient(SDB_DOMAIN, SDB_REGION)).uploadBackup(args[0].trim());
+                new SimpleDbClient(SDB_DOMAIN, SDB_REGION))
+                .uploadBackup(
+                        args[0].trim(),
+                        Boolean.parseBoolean(args[1].trim())
+                );
 
         System.out.println("Spent " + took);
     }

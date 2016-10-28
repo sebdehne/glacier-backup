@@ -7,12 +7,12 @@ import com.amazonaws.services.glacier.TreeHashGenerator;
 import com.amazonaws.services.glacier.model.*;
 import com.amazonaws.util.BinaryUtils;
 
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 public class GlacierClient {
@@ -79,11 +79,13 @@ public class GlacierClient {
         }
     }
 
-
     public String uploadParts(
             String uploadId,
             int partSize,
-            String archiveFilePath) throws Exception {
+            String archiveFilePath,
+            boolean tryRun) throws Exception {
+
+        System.out.println("Uploading " + archiveFilePath + " using partSize " + partSize);
 
         long fileSize = new File(archiveFilePath).length();
         List<Task> tasks = new LinkedList<>();
@@ -98,29 +100,39 @@ public class GlacierClient {
             int taskId = taskIdCounter++;
 
             tasks.add(new Task(taskId) {
+
+                final AtomicReference<String> checkSum = new AtomicReference<String>();
+
                 @Override
                 public UploadMultipartPartResult call() throws Exception {
-                    byte[] buffer = new byte[length];
+
+                    String contentRange = String.format("bytes %s-%s/*", startPos, startPos + length - 1);
+
+                    // cal checkSum
+                    if (checkSum.get() == null) {
+                        byte[] binaryChecksum;
+                        try (RandomAccessFile r = new RandomAccessFile(archiveFilePath, "r")) {
+                            r.seek(startPos);
+                            checkSum.set(TreeHashGenerator.calculateTreeHash(new RandomAccessWrapper(r, length)));
+                            binaryChecksum = BinaryUtils.fromHex(checkSum.get());
+                        }
+                        checkSumHolders.add(new CheckSumHolder(taskId, binaryChecksum));
+                    }
 
                     try (RandomAccessFile r = new RandomAccessFile(archiveFilePath, "r")) {
                         r.seek(startPos);
-                        int read = r.read(buffer);
-                        if (read != length) {
-                            throw new RuntimeException("Could not read from file in taskId " + taskId);
-                        }
-
-                        String contentRange = String.format("bytes %s-%s/*", startPos, startPos + length - 1);
-                        String checksum = TreeHashGenerator.calculateTreeHash(new ByteArrayInputStream(buffer));
-                        byte[] binaryChecksum = BinaryUtils.fromHex(checksum);
-                        checkSumHolders.add(new CheckSumHolder(taskId, binaryChecksum));
 
                         UploadMultipartPartRequest partRequest = new UploadMultipartPartRequest()
                                 .withVaultName(vaultName)
-                                .withBody(new ByteArrayInputStream(buffer))
-                                .withChecksum(checksum)
+                                .withBody(new RandomAccessWrapper(r, length))
+                                .withChecksum(checkSum.get())
                                 .withRange(contentRange)
                                 .withUploadId(uploadId);
-                        return client.uploadMultipartPart(partRequest);
+                        if (!tryRun) {
+                            return client.uploadMultipartPart(partRequest);
+                        } else {
+                            return null;
+                        }
                     }
                 }
             });
@@ -135,7 +147,7 @@ public class GlacierClient {
                 try {
                     t.call();
                     break;
-                } catch (IOException i) {
+                } catch (IOException | RequestTimeoutException i) {
                     // try again
                     System.out.println("Need to retry one task " + t.taskId + " because" + i.getMessage());
                     try {
@@ -169,7 +181,8 @@ public class GlacierClient {
     public String completeMultiPartUpload(
             String uploadId,
             String checksum,
-            String archiveFilePath) throws Exception {
+            String archiveFilePath,
+            boolean tryRun) throws Exception {
 
         File file = new File(archiveFilePath);
 
@@ -179,8 +192,12 @@ public class GlacierClient {
                 .withChecksum(checksum)
                 .withArchiveSize(String.valueOf(file.length()));
 
-        CompleteMultipartUploadResult compResult = client.completeMultipartUpload(compRequest);
-        return compResult.getArchiveId();
+        if (!tryRun) {
+            CompleteMultipartUploadResult compResult = client.completeMultipartUpload(compRequest);
+            return compResult.getArchiveId();
+        } else {
+            return "FAKE_ID";
+        }
     }
 
     public void getInventory() {
