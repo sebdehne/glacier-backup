@@ -11,7 +11,8 @@ import java.util.stream.Collectors;
 
 public class BackupService {
 
-    private static int partSize = (int) Math.pow(2, 30); // 1073741824 / 1GB
+    //private static int partSize = (int) Math.pow(2, 30); // 1073741824 / 1073MB
+    private static int partSize = (int) Math.pow(2, 27); //    134217728 /  134MB
     private final int maxRetention;
     private final GlacierClient glacierClient;
     private final SimpleDbClient simpleDbClient;
